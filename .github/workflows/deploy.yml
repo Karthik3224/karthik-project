@@ -9,8 +9,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    # Step 1: Checkout the repository
     - uses: actions/checkout@v4
 
+    # Step 2: Configure AWS credentials from GitHub Secrets
     - name: Configure AWS
       uses: aws-actions/configure-aws-credentials@v2
       with:
@@ -18,33 +20,37 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ap-south-1
 
+    # Step 3: Setup Terraform
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
 
-    - name: Create SSH keys
+    # Step 4: Add SSH private key from GitHub Secrets
+    - name: Setup SSH key
       run: |
-      echo "${{ secrets.SSH_PUBLIC_KEY }}" > terraform/karthikkey.pub
-      echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-      chmod 600 ~/.ssh/id_rsa
+        mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
+    # Step 5: Terraform Init & Apply
     - name: Terraform Init
       run: terraform -chdir=terraform init
 
     - name: Terraform Apply
       run: terraform -chdir=terraform apply -auto-approve
 
+    # Step 6: Get EC2 IP from Terraform output
     - name: Get EC2 IP
-      id: out
+      id: get_ip
       run: echo "ip=$(terraform -chdir=terraform output -raw public_ip)" >> $GITHUB_OUTPUT
 
+    # Step 7: Install Ansible
     - name: Install Ansible
-      run: sudo apt install ansible -y
+      run: sudo apt update && sudo apt install ansible -y
 
-    - name: Add EC2 host
-      run: ssh-keyscan -H ${{ steps.out.outputs.ip }} >> ~/.ssh/known_hosts
-
+    # Step 8: Create Ansible inventory and run playbook
     - name: Run Ansible
       run: |
         echo "[web]" > ansible/inventory
-        echo "${{ steps.out.outputs.ip }} ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa" >> ansible/inventory
+        echo "${{ steps.get_ip.outputs.ip }} ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa" >> ansible/inventory
         ansible-playbook -i ansible/inventory ansible/playbook.yml
