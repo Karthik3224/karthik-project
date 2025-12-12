@@ -9,8 +9,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
-    # Step 1: Checkout repo
+    # Step 1: Checkout
     - name: Checkout
       uses: actions/checkout@v4
 
@@ -26,36 +25,39 @@ jobs:
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
 
-    # Step 4: Setup SSH key
-    - name: Setup SSH key
+    # Step 4: Install SSH key
+    - name: Setup SSH Private Key
       run: |
         mkdir -p ~/.ssh
         echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
 
-    # Step 5: Terraform Init & Apply
+    # Step 5: Terraform Init
     - name: Terraform Init
       run: terraform -chdir=terraform init
 
+    # Step 6: Terraform Apply
     - name: Terraform Apply
       run: terraform -chdir=terraform apply -auto-approve
 
-    # Step 6: Fetch EC2 public IP from Terraform output
+    # Step 7: Get EC2 IP
     - name: Get EC2 IP
       id: get_ip
       run: echo "ip=$(terraform -chdir=terraform output -raw public_ip)" >> $GITHUB_OUTPUT
 
-    # Step 7: Add EC2 to known hosts
+    # Step 8: Add EC2 IP to known_hosts  (fixes ssh-keyscan error)
     - name: Add EC2 Host Key
-      run: ssh-keyscan -H ${{ steps.get_ip.outputs.ip }} >> ~/.ssh/known_hosts
+      run: |
+        sleep 10   # give EC2 time to boot
+        ssh-keyscan -H ${{ steps.get_ip.outputs.ip }} >> ~/.ssh/known_hosts
 
-    # Step 8: Install Ansible
+    # Step 9: Install Ansible
     - name: Install Ansible
       run: |
         sudo apt update
         sudo apt install -y ansible
 
-    # Step 9: Create Ansible inventory and run playbook
+    # Step 10: Run Ansible Playbook
     - name: Run Ansible Playbook
       run: |
         echo "[web]" > ansible/inventory
