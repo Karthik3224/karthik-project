@@ -48,8 +48,9 @@ jobs:
     - name: Get EC2 IP
       id: get_ip
       run: |
-        ip=$(terraform -chdir=terraform output -raw public_ip)
+        ip=$(terraform -chdir=terraform output -raw public_ip | tr -d '\n')
         echo "ip=$ip" >> $GITHUB_OUTPUT
+
 
 
     # Step 9: Add EC2 to known_hosts
