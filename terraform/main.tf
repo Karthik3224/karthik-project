@@ -1,19 +1,10 @@
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 4.0"
-    }
-  }
-}
-
 provider "aws" {
   region = var.aws_region
 }
 
 resource "aws_key_pair" "deploy_key" {
   key_name   = var.key_name
-  public_key = file(var.public_key_path)
+  public_key = var.ssh_public_key
 }
 
 resource "aws_security_group" "web_sg" {
@@ -42,10 +33,10 @@ resource "aws_security_group" "web_sg" {
 }
 
 resource "aws_instance" "web" {
-  ami           = var.ami_id
-  instance_type = var.instance_type
-  key_name      = aws_key_pair.deploy_key.key_name
-  vpc_security_group_ids = [aws_security_group.web_sg.id]
+  ami                    = var.ami_id
+  instance_type           = var.instance_type
+  key_name                = aws_key_pair.deploy_key.key_name
+  vpc_security_group_ids  = [aws_security_group.web_sg.id]
 
   tags = {
     Name = "KarthikDevOpsProject"

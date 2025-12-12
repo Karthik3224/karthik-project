@@ -9,60 +9,59 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: Checkout repo
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    # Step 1: Checkout repo
-    - name: Checkout
-      uses: actions/checkout@v4
+      # Step 2: Configure AWS credentials
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
 
-    # Step 2: Configure AWS credentials
-    - name: Configure AWS
-      uses: aws-actions/configure-aws-credentials@v2
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ap-south-1
+      # Step 3: Setup Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
 
-    # Step 3: Setup Terraform
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v2
+      # Step 4: Add SSH Private Key
+      - name: Setup SSH Private Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
 
-    # Step 4: Add SSH Private Key
-    - name: Setup SSH Private Key
-      run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
+      # Step 5: Terraform Init
+      - name: Terraform Init
+        run: terraform -chdir=terraform init
 
-    # Step 5: Terraform Init
-    - name: Terraform Init
-      run: terraform -chdir=terraform init
+      # Step 6: Terraform Apply
+      - name: Terraform Apply
+        run: terraform -chdir=terraform apply -auto-approve -var="ssh_public_key=${{ secrets.SSH_PUBLIC_KEY }}"
 
-    # Step 6: Terraform Apply
-    - name: Terraform Apply
-      run: terraform -chdir=terraform apply -auto-approve
+      # Step 7: Get EC2 public IP
+      - name: Get EC2 IP
+        id: get_ip
+        run: echo "ip=$(terraform -chdir=terraform output -raw public_ip)" >> $GITHUB_OUTPUT
 
-    # Step 7: Get EC2 public IP
-    - name: Get EC2 IP
-      id: get_ip
-      run: echo "ip=$(terraform -chdir=terraform output -raw public_ip)" >> $GITHUB_OUTPUT
+      # Step 8: Add EC2 to known_hosts
+      - name: Add EC2 Host Key
+        run: |
+          echo "Waiting 20 seconds for EC2 to fully boot..."
+          sleep 20
+          ssh-keyscan -H ${{ steps.get_ip.outputs.ip }} >> ~/.ssh/known_hosts
 
-    # Step 8: Add EC2 to known_hosts (Fix ssh-keyscan)
-    - name: Add EC2 Host Key
-      run: |
-        echo "Waiting 20 seconds for EC2 to fully boot..."
-        sleep 20
-        ssh-keyscan -H ${{ steps.get_ip.outputs.ip }} >> ~/.ssh/known_hosts
+      # Step 9: Install Ansible
+      - name: Install Ansible
+        run: |
+          sudo apt update
+          sudo apt install -y ansible
 
-    # Step 9: Install Ansible
-    - name: Install Ansible
-      run: |
-        sudo apt update
-        sudo apt install -y ansible
-
-    # Step 10: Run Ansible Playbook
-    - name: Run Ansible Playbook
-      run: |
-        echo "[web]" > ansible/inventory
-        echo "${{ steps.get_ip.outputs.ip }} ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa" >> ansible/inventory
-        
-        ansible-playbook -i ansible/inventory ansible/playbook.yml
+      # Step 10: Run Ansible Playbook
+      - name: Run Ansible Playbook
+        run: |
+          echo "[web]" > ansible/inventory
+          echo "${{ steps.get_ip.outputs.ip }} ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa" >> ansible/inventory
+          
+          ansible-playbook -i ansible/inventory ansible/playbook.yml
