@@ -9,7 +9,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # Step 1: Checkout
+
+    # Step 1: Checkout repo
     - name: Checkout
       uses: actions/checkout@v4
 
@@ -25,7 +26,7 @@ jobs:
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
 
-    # Step 4: Install SSH key
+    # Step 4: Add SSH Private Key
     - name: Setup SSH Private Key
       run: |
         mkdir -p ~/.ssh
@@ -40,15 +41,16 @@ jobs:
     - name: Terraform Apply
       run: terraform -chdir=terraform apply -auto-approve
 
-    # Step 7: Get EC2 IP
+    # Step 7: Get EC2 public IP
     - name: Get EC2 IP
       id: get_ip
       run: echo "ip=$(terraform -chdir=terraform output -raw public_ip)" >> $GITHUB_OUTPUT
 
-    # Step 8: Add EC2 IP to known_hosts  (fixes ssh-keyscan error)
+    # Step 8: Add EC2 to known_hosts (Fix ssh-keyscan)
     - name: Add EC2 Host Key
       run: |
-        sleep 10   # give EC2 time to boot
+        echo "Waiting 20 seconds for EC2 to fully boot..."
+        sleep 20
         ssh-keyscan -H ${{ steps.get_ip.outputs.ip }} >> ~/.ssh/known_hosts
 
     # Step 9: Install Ansible
